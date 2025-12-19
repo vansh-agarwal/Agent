@@ -242,6 +242,7 @@ async function fetchEvents() {
 async function sendChatMessage() {
     const input = document.getElementById('chatInput');
     const message = input.value.trim();
+    const language = document.getElementById('chatLanguage')?.value || 'english';
 
     if (!message || state.isTyping) return;
 
@@ -256,10 +257,10 @@ async function sendChatMessage() {
     // Disable input while processing
     input.disabled = true;
 
-    // Send to API
+    // Send to API with language preference
     const data = await apiCall('/chat', {
         method: 'POST',
-        body: JSON.stringify({ message })
+        body: JSON.stringify({ message, language })
     });
 
     // Remove typing indicator

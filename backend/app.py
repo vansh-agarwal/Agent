@@ -540,19 +540,21 @@ def chat():
     """Process natural language command via AI"""
     data = request.json
     message = data.get('message', '')
+    language = data.get('language', 'english')  # Get language preference
     user_email = get_user_email()
     
     if not message:
         return jsonify({'error': 'No message provided'}), 400
     
-    # Build context with user-specific data
+    # Build context with user-specific data and language
     context = {
-        'tasks': db.get_all_tasks(user_email=user_email)[:20],  # Limit context size
+        'tasks': db.get_all_tasks(user_email=user_email)[:20],
         'events': db.get_all_events(user_email=user_email)[:10],
-        'user_email': user_email
+        'user_email': user_email,
+        'language': language  # Pass language to AI
     }
     
-    print(f"[{datetime.now().isoformat()}] Chat Request: {message} (User: {user_email})")
+    print(f"[{datetime.now().isoformat()}] Chat Request: {message} (User: {user_email}, Language: {language})")
     
     # Process with AI agent
     result = ai_agent.process_user_input(message, context)
@@ -562,8 +564,8 @@ def chat():
     action_result = execute_action(result, user_email)
     print(f"Action Result for {user_email}: {json.dumps(action_result, default=str)}")
     
-    # Generate conversational response with action context
-    response_text = ai_agent.chat_response(message, conversation_history[-6:], action_result)
+    # Generate conversational response with action context and language
+    response_text = ai_agent.chat_response(message, conversation_history[-6:], action_result, language)
     
     # Update conversation history
     conversation_history.append({'role': 'user', 'content': message})
@@ -614,27 +616,74 @@ def execute_action(action_data: dict, user_email: str) -> dict:
                 'end_time': end_dt.isoformat(),
                 'location': params.get('location', ''),
                 'attendees': params.get('attendees', []),
-                'user_email': user_email  # Add user isolation
+                'user_email': user_email
             }
             
             google_event_id = None
-            if calendar_integration:
-                google_event_id = calendar_integration.create_event(event_data)
-                event_data['google_event_id'] = google_event_id
+            
+            # Use user's OAuth tokens for Google Calendar (same as manual creation)
+            try:
+                calendar_service = get_google_service_for_user(user_email, 'calendar')
+                if calendar_service:
+                    event = {
+                        'summary': event_data.get('title', 'Untitled Event'),
+                        'description': event_data.get('description', ''),
+                        'start': {
+                            'dateTime': event_data['start_time'],
+                            'timeZone': 'UTC',
+                        },
+                        'end': {
+                            'dateTime': event_data['end_time'],
+                            'timeZone': 'UTC',
+                        },
+                    }
+                    
+                    created_event = calendar_service.events().insert(
+                        calendarId='primary',
+                        body=event
+                    ).execute()
+                    
+                    google_event_id = created_event.get('id')
+                    event_data['google_event_id'] = google_event_id
+                    print(f"[Chat] Created Google Calendar event: {google_event_id}")
+            except Exception as e:
+                print(f"[Chat] Error creating Google Calendar event: {e}")
             
             event_id = db.create_event(event_data, user_email)
-            return {'success': True, 'event_id': event_id, 'type': 'event_created'}
+            return {'success': True, 'event_id': event_id, 'google_event_id': google_event_id, 'type': 'event_created'}
         
         elif action_type == 'send_email':
-            # Send email
-            if gmail_integration:
-                success = gmail_integration.send_email(
-                    to=params.get('emails', [''])[0],
-                    subject=params.get('title', 'Message'),
-                    body=params.get('description', '')
-                )
-            else:
-                success = True  # Demo mode
+            # Send email using user's OAuth tokens
+            success = False
+            try:
+                gmail_service = get_google_service_for_user(user_email, 'gmail')
+                if gmail_service:
+                    import base64
+                    from email.message import EmailMessage
+                    
+                    to_email = params.get('emails', [''])[0]
+                    subject = params.get('title', 'Message')
+                    body = params.get('description', '')
+                    
+                    message = EmailMessage()
+                    message.set_content(body)
+                    message['To'] = to_email
+                    message['Subject'] = subject
+                    
+                    encoded_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
+                    
+                    gmail_service.users().messages().send(
+                        userId='me',
+                        body={'raw': encoded_message}
+                    ).execute()
+                    
+                    success = True
+                    print(f"[Chat] Email sent to {to_email}")
+                else:
+                    print(f"[Chat] Gmail service not available for user {user_email}")
+            except Exception as e:
+                print(f"[Chat] Error sending email: {e}")
+            
             return {'success': success, 'type': 'email_sent'}
         
         elif action_type == 'query_tasks':

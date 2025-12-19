@@ -28,11 +28,24 @@ class NLPEngine:
             ],
             IntentType.CREATE_EVENT: [
                 r'schedule\s+(?:a\s+)?meeting',
+                r'schedule\s+(?:a\s+)?flight',
+                r'schedule\s+(?:a\s+)?call',
+                r'schedule\s+(?:a\s+)?appointment',
+                r'schedule\s+(?:a\s+)?\w+',  # schedule + any noun
                 r'create\s+(?:an?\s+)?event',
-                r'add\s+(?:to\s+)?calendar',
+                r'add\s+(?:to\s+)?(?:my\s+)?calendar',
+                r'put\s+(?:in\s+)?(?:my\s+)?calendar',
                 r'book\s+(?:a\s+)?meeting',
+                r'book\s+(?:a\s+)?flight',
+                r'book\s+(?:a\s+)?\w+',  # book + any noun
                 r'set\s+up\s+(?:a\s+)?meeting',
-                r'meeting\s+(?:at|on|with)'
+                r'meeting\s+(?:at|on|with)',
+                r'(?:at|for)\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)',  # at 6:30 pm
+                r'tomorrow\s+at\s+\d',  # tomorrow at X
+                r'today\s+at\s+\d',  # today at X
+                r'calendar',  # explicit calendar mention
+                r'flight\s+(?:at|on|for|tomorrow)',
+                r'appointment\s+(?:at|on|for)'
             ],
             IntentType.SEND_EMAIL: [
                 r'send\s+(?:an?\s+)?email',
@@ -234,11 +247,29 @@ class NLPEngine:
     
     def _extract_title(self, text: str, text_lower: str, intent_type: IntentType) -> str:
         """Extract the main title/subject from text"""
+        
+        # First, try to find explicit title patterns like "called X", "titled X", "named X", "about X"
+        explicit_patterns = [
+            r'(?:called|titled|named)\s+["\']?([^"\']+?)["\']?\s*(?:at|on|for|with|tomorrow|today|$)',
+            r'(?:called|titled|named)\s+["\']?(.+?)["\']?$',
+            r'about\s+["\']?([^"\']+?)["\']?\s*(?:at|on|for|with|tomorrow|today|$)',
+            r'meeting\s+(?:with\s+)?["\']?([A-Z][a-zA-Z\s]+)["\']?\s*(?:at|on|for|tomorrow|today|$)',
+        ]
+        
+        for pattern in explicit_patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                title = match.group(1).strip()
+                if title and len(title) > 2:
+                    return title
+        
         # Remove common intent phrases
         remove_patterns = [
             r'create\s+(?:a\s+)?task\s+(?:to\s+)?',
             r'add\s+(?:a\s+)?task\s+(?:to\s+)?',
-            r'schedule\s+(?:a\s+)?meeting\s+(?:about|for|to\s+discuss)?\s*',
+            r'add\s+(?:a\s+)?task\s+(?:called|titled|named)\s+',
+            r'schedule\s+(?:a\s+)?(?:meeting|event)\s+(?:about|for|to\s+discuss|called|titled|named)?\s*',
+            r'create\s+(?:an?\s+)?event\s+(?:called|titled|named)?\s*',
             r'remind\s+me\s+to\s+',
             r'i\s+need\s+to\s+',
             r'todo:\s*',

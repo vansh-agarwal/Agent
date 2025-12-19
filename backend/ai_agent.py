@@ -39,25 +39,66 @@ class AIAgent:
                 print(f"Warning: Could not initialize Gemini: {e}")
                 self.model = None
         
-        # Agent personality and system prompt
-        self.system_prompt = """You are ARIA, an intelligent personal task automation assistant. 
+        # Agent personality and system prompt - CALENDAR-FIRST FOR SCHEDULED ITEMS
+        self.system_prompt = """You are ARIA, an intelligent personal task automation assistant.
 Your role is to help users manage their tasks, calendar events, and emails efficiently.
 
-When the user asks you to do something, respond with a JSON object containing:
-- action: The action type (create_task, create_event, send_email, query_tasks, query_events)
-- parameters: Object with the action parameters
-- response: A friendly response message
+## CATEGORIZATION RULES - READ CAREFULLY:
 
-For create_task:
-- parameters should include: title, description (optional), priority (LOW/MEDIUM/HIGH/URGENT), deadline (ISO datetime, optional)
+### RULE 1: ANYTHING WITH A SPECIFIC TIME OR DATE → create_event (CALENDAR)
+If the user mentions ANY of these, use create_event:
+- A time: "at 6:30 pm", "at 3pm", "at noon", "at 10:30"
+- A date: "tomorrow", "today", "Monday", "December 20", "next week"
+- Scheduling words: "schedule", "book", "reserve", "appointment", "meeting", "flight"
+
+### RULE 2: ONLY USE create_task WHEN:
+- User explicitly says "task", "todo", "add task", "create task"
+- No time or date is mentioned AND it's a general to-do item
+- Examples: "remind me to buy groceries" (no time), "add task to review documents"
+
+### RULE 3: WHEN IN DOUBT WITH TIME → USE create_event
+If a time is mentioned, it MUST go to calendar!
+
+## CRITICAL EXAMPLES:
+
+"Schedule a flight for tomorrow at 6:30 pm" 
+→ {"action": "create_event", "parameters": {"title": "Flight", "datetime": "2024-12-20T18:30:00", "duration": 120}}
+
+"Book a meeting at 3pm tomorrow"
+→ {"action": "create_event", "parameters": {"title": "Meeting", "datetime": "2024-12-20T15:00:00", "duration": 60}}
+
+"Schedule appointment for Monday at 10am"  
+→ {"action": "create_event", "parameters": {"title": "Appointment", "datetime": "...", "duration": 60}}
+
+"Add task to review documents"
+→ {"action": "create_task", "parameters": {"title": "Review documents", "priority": "MEDIUM"}}
+
+"Remind me to buy milk" (no time)
+→ {"action": "create_task", "parameters": {"title": "Buy milk", "priority": "MEDIUM"}}
+
+## DATETIME FORMAT:
+- Use ISO format: YYYY-MM-DDTHH:MM:SS
+- If user says "tomorrow", calculate tomorrow's date from current_time in context
+- If user says "6:30 pm", convert to 18:30:00 in 24-hour format
+
+## RESPONSE FORMAT:
+Respond with a JSON object containing:
+- action: create_task, create_event, send_email, query_tasks, query_events, general_chat
+- parameters: Object with parameters
+- response: Friendly confirmation message
 
 For create_event:
-- parameters should include: title, datetime (ISO format), duration (minutes), location (optional)
+- title: What the event is about
+- datetime: ISO format datetime
+- duration: Minutes (default 60, use 120 for flights/travel)
+- location: Optional
 
-For send_email:
-- parameters should include: emails (array), title (subject), description (body)
+For create_task:
+- title: What needs to be done
+- priority: LOW/MEDIUM/HIGH/URGENT
+- deadline: Optional ISO datetime
 
-Always respond with valid JSON only."""
+RESPOND WITH VALID JSON ONLY. NO MARKDOWN. NO EXPLANATION OUTSIDE JSON."""
     
     def process_user_input(self, user_message: str, context: Optional[Dict] = None) -> Dict:
         """
@@ -289,57 +330,133 @@ Write a complete, well-structured email that is concise and clear. Respond with 
             print(f"Email drafting error: {e}")
             return f"Subject: {subject}\n\n{context}"
     
-    def chat_response(self, user_message: str, conversation_history: List[Dict] = None, action_result: Dict = None) -> str:
-        """Generate conversational response to user"""
+    def chat_response(self, user_message: str, conversation_history: List[Dict] = None, action_result: Dict = None, language: str = 'english') -> str:
+        """Generate conversational response to user in selected language"""
+        
+        # Language-specific responses for actions
+        action_responses = {
+            'english': {
+                'task_created': "✅ Done! I've added that to your task list. Is there anything else you'd like me to help with?",
+                'event_created': "📅 Perfect! I've scheduled that event on your calendar. You're all set! 🎉",
+                'email_sent': "📧 Your email has been sent! Let me know if you need to send another.",
+                'tasks_retrieved': "📋 Here are your tasks! You've got {} task(s). Anything you'd like me to add or change?",
+                'events_retrieved': "📅 You have {} upcoming event(s). Want me to schedule something new?",
+                'no_tasks': "📋 Your task list is empty! That's great if you're all done, or I can help add something new.",
+                'no_events': "📅 No upcoming events on your calendar. Want me to schedule one?"
+            },
+            'hindi': {
+                'task_created': "✅ हो गया! मैंने इसे आपकी टास्क लिस्ट में जोड़ दिया है। क्या कुछ और मदद चाहिए?",
+                'event_created': "📅 बढ़िया! मैंने यह इवेंट आपके कैलेंडर में शेड्यूल कर दिया है! 🎉",
+                'email_sent': "📧 आपका ईमेल भेज दिया गया है! बताइए क्या कुछ और भेजना है?",
+                'tasks_retrieved': "📋 आपके {} टास्क हैं। कुछ जोड़ना या बदलना है?",
+                'events_retrieved': "📅 आपके {} आगामी इवेंट हैं। कुछ नया शेड्यूल करना है?",
+                'no_tasks': "📋 आपकी टास्क लिस्ट खाली है! कुछ नया जोड़ूं?",
+                'no_events': "📅 कोई आगामी इवेंट नहीं है। कुछ शेड्यूल करूं?"
+            },
+            'tamil': {
+                'task_created': "✅ முடிந்தது! உங்கள் பணிப்பட்டியலில் சேர்த்துவிட்டேன். வேறு ஏதாவது உதவி வேண்டுமா?",
+                'event_created': "📅 அருமை! உங்கள் நாட்காட்டியில் நிகழ்வை திட்டமிட்டுவிட்டேன்! 🎉",
+                'email_sent': "📧 உங்கள் மின்னஞ்சல் அனுப்பப்பட்டது! வேறு ஏதாவது அனுப்ப வேண்டுமா?",
+                'tasks_retrieved': "📋 உங்களுக்கு {} பணிகள் உள்ளன। ஏதாவது சேர்க்க வேண்டுமா?",
+                'events_retrieved': "📅 உங்களுக்கு {} வரவிருக்கும் நிகழ்வுகள் உள்ளன। புதியதை திட்டமிடலாமா?",
+                'no_tasks': "📋 உங்கள் பணிப்பட்டியல் காலியாக உள்ளது! புதிதாக சேர்க்கலாமா?",
+                'no_events': "📅 வரவிருக்கும் நிகழ்வுகள் இல்லை. ஏதாவது திட்டமிடலாமா?"
+            }
+        }
+        
+        responses = action_responses.get(language, action_responses['english'])
         
         # If we have action result, generate a response based on that
         if action_result and action_result.get('success'):
             action_type = action_result.get('type', '')
             if action_type == 'task_created':
-                return f"✅ Done! I've created that task for you. You can see it in your task list."
+                return responses['task_created']
             elif action_type == 'event_created':
-                return f"📅 Great! I've scheduled that event on your calendar."
+                return responses['event_created']
             elif action_type == 'email_sent':
-                return f"📧 Email sent successfully!"
+                return responses['email_sent']
             elif action_type == 'tasks_retrieved':
                 tasks = action_result.get('tasks', [])
                 if tasks:
-                    return f"📋 You have {len(tasks)} task(s). Check the tasks panel to see them all."
-                return "📋 You don't have any tasks yet. Want me to create one?"
+                    return responses['tasks_retrieved'].format(len(tasks))
+                return responses['no_tasks']
             elif action_type == 'events_retrieved':
                 events = action_result.get('events', [])
                 if events:
-                    return f"📅 You have {len(events)} upcoming event(s). Check your calendar panel."
-                return "📅 No upcoming events. Shall I schedule something?"
+                    return responses['events_retrieved'].format(len(events))
+                return responses['no_events']
         
-        # Try Gemini for natural conversation
+        # Try Gemini for natural conversation in selected language
         if self.model:
-            prompt = f"""You are ARIA, a helpful AI assistant. Respond conversationally to the user.
-Keep responses brief and friendly. If you performed an action, confirm it.
+            lang_instruction = {
+                'english': 'Respond in English.',
+                'hindi': 'Respond in Hindi (हिंदी में जवाब दें). Use Devanagari script.',
+                'tamil': 'Respond in Tamil (தமிழில் பதிலளிக்கவும்). Use Tamil script.'
+            }
+            
+            prompt = f"""You are ARIA, a warm, friendly, and helpful AI assistant. You have a cheerful personality and genuinely care about helping users with their daily tasks.
 
-User: {user_message}
+PERSONALITY TRAITS:
+- Warm and welcoming, like a helpful friend
+- Uses occasional emojis to express emotions 😊
+- Gives practical advice when asked
+- Remembers context and follows up naturally
+- Can chat casually about daily life, weather, motivation, etc.
+- Helpful for daily conversations and issues
 
-Respond naturally in 1-2 sentences."""
+{lang_instruction.get(language, lang_instruction['english'])}
+
+User said: {user_message}
+
+Respond naturally in 1-3 sentences. Be conversational, helpful, and human-like. If the user seems stressed, be supportive. If they're happy, share their joy!"""
             
             try:
                 response = self.model.generate_content(prompt)
                 return response.text.strip()
             except Exception as e:
                 print(f"Chat error: {e}")
-                # Fall through to rule-based response
         
-        # Rule-based responses when Gemini unavailable
+        # Rule-based fallback responses by language
+        fallback = {
+            'english': {
+                'greet': "Hello! 👋 Great to see you! How can I make your day easier?",
+                'task': "I'll create that task for you right away! ✅",
+                'event': "Let me add that to your calendar! 📅",
+                'email': "I'll help you send that email! 📧",
+                'help': "I'm here to help! I can:\n• Create tasks: 'Remind me to...'\n• Schedule events: 'Schedule meeting at...'\n• Send emails: 'Email someone about...'\n• Chat: 'How's my day looking?'",
+                'default': "Got it! Let me help you with that. 🤝"
+            },
+            'hindi': {
+                'greet': "नमस्ते! 👋 आपसे मिलकर खुशी हुई! आज मैं कैसे मदद कर सकता हूं?",
+                'task': "मैं अभी वह टास्क बना देता हूं! ✅",
+                'event': "मैं इसे आपके कैलेंडर में जोड़ देता हूं! 📅",
+                'email': "मैं वह ईमेल भेजने में मदद करता हूं! 📧",
+                'help': "मैं यहां मदद के लिए हूं!\n• टास्क: 'मुझे याद दिलाओ...'\n• इवेंट: 'मीटिंग शेड्यूल करो...'\n• ईमेल: 'किसी को ईमेल करो...'",
+                'default': "समझ गया! मैं इसमें आपकी मदद करता हूं। 🤝"
+            },
+            'tamil': {
+                'greet': "வணக்கம்! 👋 உங்களைப் பார்த்ததில் மகிழ்ச்சி! நான் எப்படி உதவ முடியும்?",
+                'task': "உடனே அந்த பணியை உருவாக்குகிறேன்! ✅",
+                'event': "உங்கள் நாட்காட்டியில் சேர்க்கிறேன்! 📅",
+                'email': "அந்த மின்னஞ்சலை அனுப்ப உதவுகிறேன்! 📧",
+                'help': "நான் உதவ இங்கே இருக்கிறேன்!\n• பணிகள்: 'எனக்கு நினைவூட்டு...'\n• நிகழ்வுகள்: 'சந்திப்பை திட்டமிடு...'\n• மின்னஞ்சல்: 'யாருக்காவது மின்னஞ்சல் அனுப்பு...'",
+                'default': "புரிந்தது! இதில் உங்களுக்கு உதவுகிறேன்। 🤝"
+            }
+        }
+        
+        lang_fallback = fallback.get(language, fallback['english'])
         msg_lower = user_message.lower()
         
-        if any(word in msg_lower for word in ['task', 'todo', 'remind']):
-            return "I'll create that task for you. Check your task list!"
-        elif any(word in msg_lower for word in ['meeting', 'schedule', 'calendar', 'event']):
-            return "I'll add that to your calendar. Check the events section!"
-        elif any(word in msg_lower for word in ['email', 'send', 'mail']):
-            return "Use the email form below to send your message."
-        elif any(word in msg_lower for word in ['hi', 'hello', 'hey']):
-            return "Hello! 👋 I can help you create tasks, schedule events, and compose emails. Just tell me what you need!"
-        elif any(word in msg_lower for word in ['help', 'what can']):
-            return "I can help you with:\n• Creating tasks: 'Add task to review documents'\n• Scheduling events: 'Schedule meeting tomorrow at 2pm'\n• Sending emails: 'Email john about the project'"
+        if any(word in msg_lower for word in ['task', 'todo', 'remind', 'टास्क', 'याद', 'பணி']):
+            return lang_fallback['task']
+        elif any(word in msg_lower for word in ['meeting', 'schedule', 'calendar', 'event', 'मीटिंग', 'कैलेंडर', 'சந்திப்பு', 'நாட்காட்டி']):
+            return lang_fallback['event']
+        elif any(word in msg_lower for word in ['email', 'send', 'mail', 'ईमेल', 'भेज', 'மின்னஞ்சல்']):
+            return lang_fallback['email']
+        elif any(word in msg_lower for word in ['hi', 'hello', 'hey', 'नमस्ते', 'हाय', 'வணக்கம்']):
+            return lang_fallback['greet']
+        elif any(word in msg_lower for word in ['help', 'what can', 'मदद', 'உதவி']):
+            return lang_fallback['help']
         else:
-            return "I'm processing your request. Check your tasks and calendar for updates!"
+            return lang_fallback['default']
+
