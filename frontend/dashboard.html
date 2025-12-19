@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard | ARIA</title>
+
+    <script>
+        (function () {
+            const user = localStorage.getItem('aria_user');
+            if (!user) window.location.href = 'index.html';
+        })();
+    </script>
+
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="dashboard.css">
+</head>
+
+<body>
+    <header class="header">
+        <div class="logo">
+            <div class="logo-icon">🧠</div>
+            <div>
+                <h1>ARIA</h1>
+                <div class="logo-sub">AI-Powered Task Automation</div>
+            </div>
+        </div>
+        <div class="header-right">
+            <span id="userGreeting" style="color: #888;"></span>
+            <div class="status">
+                <div class="status-dot"></div>
+                <span id="statusText">Connecting...</span>
+            </div>
+            <button class="btn-secondary btn-small" onclick="handleLogout()">Logout</button>
+        </div>
+    </header>
+
+    <div class="grid">
+        <!-- Chat -->
+        <div class="section">
+            <div class="section-header">
+                <h2>🧠 AI Assistant</h2>
+            </div>
+            <div class="chat-box" id="chatMessages">
+                <div class="chat-msg assistant">
+                    👋 Hi! I'm ARIA, your AI assistant. I can help you:
+                    <br>• Create tasks: "Add task to review proposal"
+                    <br>• Schedule events: "Schedule meeting tomorrow at 2pm"
+                    <br>• Send emails: "Email john about the project"
+                </div>
+            </div>
+            <div class="chat-input">
+                <input type="text" id="chatInput" placeholder="Ask ARIA anything..." />
+                <button class="btn-primary" id="sendChatBtn">Send</button>
+            </div>
+        </div>
+
+        <!-- Tasks -->
+        <div class="section">
+            <div class="section-header">
+                <h2>✅ Smart Tasks</h2>
+                <button class="btn-primary btn-small" id="addTaskBtn">+ Add Task</button>
+            </div>
+
+            <div id="taskForm" class="form-section">
+                <input type="text" id="taskTitle" placeholder="What needs to be done?" />
+                <textarea id="taskDescription" placeholder="Add details (optional)"></textarea>
+                <label>Priority Level</label>
+                <select id="taskPriority">
+                    <option value="LOW">🟢 Low Priority</option>
+                    <option value="MEDIUM" selected>🟡 Medium Priority</option>
+                    <option value="HIGH">🟠 High Priority</option>
+                    <option value="URGENT">🔴 Urgent</option>
+                </select>
+                <label>Deadline</label>
+                <input type="datetime-local" id="taskDeadline" />
+                <div class="actions">
+                    <button class="btn-primary btn-small" id="saveTaskBtn">💾 Save Task</button>
+                    <button class="btn-secondary btn-small" id="cancelTaskBtn">Cancel</button>
+                </div>
+            </div>
+
+            <div class="list" id="taskList">
+                <div class="empty">
+                    <div class="empty-icon">📋</div>
+                    No tasks yet. Create one or ask ARIA!
+                </div>
+            </div>
+        </div>
+
+        <!-- Events/Calendar -->
+        <div class="section">
+            <div class="section-header">
+                <h2>📅 Calendar</h2>
+                <button class="btn-primary btn-small" id="addEventBtn">+ New Event</button>
+            </div>
+
+            <div id="eventForm" class="form-section">
+                <input type="text" id="eventTitle" placeholder="Event title" />
+                <label>Start Time</label>
+                <input type="datetime-local" id="eventStart" />
+                <label>Duration (minutes)</label>
+                <input type="number" id="eventDuration" value="60" min="15" step="15" />
+                <input type="text" id="eventLocation" placeholder="📍 Location (optional)" />
+                <div class="actions">
+                    <button class="btn-primary btn-small" id="saveEventBtn">📅 Create Event</button>
+                    <button class="btn-secondary btn-small" id="cancelEventBtn">Cancel</button>
+                </div>
+            </div>
+
+            <div class="list" id="calendarView">
+                <div class="empty">
+                    <div class="empty-icon">📆</div>
+                    No upcoming events. Schedule with ARIA!
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bottom Section: Email + Stats -->
+    <div class="bottom-section">
+        <div class="email-section">
+            <h3>📧 Quick Email Composer</h3>
+            <div class="email-grid">
+                <input type="email" id="emailRecipient" placeholder="To: recipient@email.com" />
+                <input type="text" id="emailSubject" placeholder="Subject" />
+                <textarea id="emailBody" class="full" placeholder="Write your message..." rows="3"></textarea>
+                <button class="btn-primary full" id="sendEmailBtn">📨 Send Email</button>
+            </div>
+        </div>
+
+        <div class="stat">
+            <div class="stat-value" id="statTasks">0</div>
+            <div class="stat-label">Active Tasks</div>
+        </div>
+
+        <div class="stat">
+            <div class="stat-value" id="statEvents">0</div>
+            <div class="stat-label">Upcoming Events</div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>

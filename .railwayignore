@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+.git/
+frontend/
+*.db
+*.pickle
+test_*.py
+quick_test.py
+network_test.py
+*.md
+.gitignore
+vercel.json
+DSARG_2.pdf
