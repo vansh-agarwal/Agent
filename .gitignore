@@ -35,3 +35,6 @@ token_calendar.pickle
 .DS_Store
 Thumbs.db
 .vercel
+
+# Jupyter
+.ipynb_checkpoints/

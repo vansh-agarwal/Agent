@@ -710,7 +710,114 @@ def check_workflows():
     return jsonify({'success': True, 'message': 'Workflow check completed'})
 
 
+# ==================== ML PREDICTION ROUTES ====================
+
+# Import ML service
+try:
+    from ml_service import get_ml_service
+    ml_service = get_ml_service()
+    print("✅ ML Service initialized")
+except Exception as e:
+    print(f"⚠️ ML Service not available: {e}")
+    ml_service = None
+
+
+@app.route('/api/ml/status', methods=['GET'])
+def ml_status():
+    """Get ML models status"""
+    if ml_service is None:
+        return jsonify({'available': False, 'models': {}})
+    
+    return jsonify({
+        'available': True,
+        'models': ml_service.get_model_status()
+    })
+
+
+@app.route('/api/ml/career-predict', methods=['POST'])
+def predict_career():
+    """
+    Predict career income bracket based on demographic data.
+    
+    Expected JSON body:
+    {
+        "age": 35,
+        "workclass": "Private",
+        "education": "Bachelors",
+        "education_num": 13,
+        "marital_status": "Married-civ-spouse",
+        "occupation": "Prof-specialty",
+        "relationship": "Husband",
+        "race": "White",
+        "sex": "Male",
+        "capital_gain": 0,
+        "capital_loss": 0,
+        "hours_per_week": 40,
+        "native_country": "United-States"
+    }
+    """
+    if ml_service is None:
+        return jsonify({'error': 'ML service not available', 'success': False}), 503
+    
+    try:
+        data = request.json
+        result = ml_service.predict_career_income(data)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e), 'success': False}), 500
+
+
+@app.route('/api/ml/hr-analyze', methods=['POST'])
+def analyze_hr():
+    """
+    Analyze employee productivity based on HR metrics.
+    
+    Expected JSON body:
+    {
+        "satisfaction_rate": 0.8,
+        "salary": 60000,
+        "age": 32,
+        "position": "Senior",
+        "years_at_company": 4,
+        "projects_completed": 12
+    }
+    """
+    if ml_service is None:
+        return jsonify({'error': 'ML service not available', 'success': False}), 503
+    
+    try:
+        data = request.json
+        result = ml_service.predict_hr_productivity(data)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e), 'success': False}), 500
+
+
+@app.route('/api/ml/customer-segment', methods=['POST'])
+def segment_customer():
+    """
+    Segment customer based on RFM analysis.
+    
+    Expected JSON body:
+    {
+        "recency": 15,
+        "frequency": 8,
+        "monetary": 500
+    }
+    """
+    if ml_service is None:
+        return jsonify({'error': 'ML service not available', 'success': False}), 503
+    
+    try:
+        data = request.json
+        result = ml_service.predict_customer_segment(data)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e), 'success': False}), 500
+
+
 # ==================== UTILITY ROUTES ====================
+
 
 @app.route('/api/status', methods=['GET'])
 def get_status():

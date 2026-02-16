@@ -872,7 +872,235 @@ window.deleteTask = deleteTask;
 window.deleteEvent = deleteEvent;
 window.handleLogout = handleLogout;
 
+// ==================== ML PREDICTIONS ====================
+
+// Initialize ML Insights tabs
+document.addEventListener('DOMContentLoaded', () => {
+    initMLInsights();
+});
+
+function initMLInsights() {
+    // Tab switching
+    const tabs = document.querySelectorAll('.insight-tab');
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            const tabName = tab.dataset.tab;
+
+            // Update active tab
+            tabs.forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+
+            // Update active panel
+            document.querySelectorAll('.insight-panel').forEach(p => p.classList.remove('active'));
+            document.getElementById(`${tabName}-panel`)?.classList.add('active');
+        });
+    });
+
+    // Career Form
+    document.getElementById('careerForm')?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        await predictCareer();
+    });
+
+    // HR Form
+    document.getElementById('hrForm')?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        await analyzeHR();
+    });
+
+    // Customer Form
+    document.getElementById('customerForm')?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        await segmentCustomer();
+    });
+}
+
+async function predictCareer() {
+    const resultDiv = document.getElementById('career-result');
+    resultDiv.innerHTML = '<div class="loading">🔮 Analyzing your career profile...</div>';
+    resultDiv.className = 'ml-result loading';
+
+    const data = {
+        age: parseInt(document.getElementById('career-age').value),
+        workclass: document.getElementById('career-workclass').value,
+        education: document.getElementById('career-education').value,
+        education_num: 13, // Default
+        occupation: document.getElementById('career-occupation').value,
+        hours_per_week: parseInt(document.getElementById('career-hours').value),
+        sex: document.getElementById('career-sex').value,
+        marital_status: 'Never-married',
+        relationship: 'Not-in-family',
+        race: 'White',
+        capital_gain: 0,
+        capital_loss: 0,
+        native_country: 'United-States'
+    };
+
+    try {
+        const result = await apiCall('/ml/career-predict', {
+            method: 'POST',
+            body: JSON.stringify(data)
+        });
+
+        resultDiv.className = 'ml-result';
+
+        if (result && result.success) {
+            const emoji = result.income_bracket === '>50K' ? '💰' : '📊';
+            const factorsHtml = result.factors?.length > 0
+                ? `<div class="result-factors">
+                    <h5>Key Insights</h5>
+                    <ul>${result.factors.map(f => `<li>${f}</li>`).join('')}</ul>
+                   </div>`
+                : '';
+
+            resultDiv.innerHTML = `
+                <div class="result-card result-success">
+                    <div class="result-header">
+                        <div class="result-emoji">${emoji}</div>
+                        <div class="result-title">
+                            <h4>Predicted Income: ${result.income_bracket}</h4>
+                            <span>Confidence: ${result.confidence}%</span>
+                        </div>
+                    </div>
+                    <div class="result-body">
+                        <p>${result.interpretation}</p>
+                        ${factorsHtml}
+                    </div>
+                </div>
+            `;
+        } else {
+            resultDiv.innerHTML = `<div class="result-error">❌ ${result?.error || 'Prediction failed'}</div>`;
+        }
+    } catch (error) {
+        resultDiv.className = 'ml-result';
+        resultDiv.innerHTML = `<div class="result-error">❌ Error: ${error.message}</div>`;
+    }
+}
+
+async function analyzeHR() {
+    const resultDiv = document.getElementById('hr-result');
+    resultDiv.innerHTML = '<div class="loading">📊 Analyzing productivity metrics...</div>';
+    resultDiv.className = 'ml-result loading';
+
+    const data = {
+        satisfaction_rate: parseFloat(document.getElementById('hr-satisfaction').value),
+        salary: parseFloat(document.getElementById('hr-salary').value),
+        age: parseInt(document.getElementById('hr-age').value),
+        position: document.getElementById('hr-position').value,
+        years_at_company: parseInt(document.getElementById('hr-years').value),
+        projects_completed: parseInt(document.getElementById('hr-projects').value)
+    };
+
+    try {
+        const result = await apiCall('/ml/hr-analyze', {
+            method: 'POST',
+            body: JSON.stringify(data)
+        });
+
+        resultDiv.className = 'ml-result';
+
+        if (result && result.success) {
+            const analysis = result.analysis || {};
+            const strengthsHtml = analysis.strengths?.length > 0
+                ? analysis.strengths.map(s => `<li>✅ ${s}</li>`).join('')
+                : '';
+            const improvementsHtml = analysis.areas_for_improvement?.length > 0
+                ? analysis.areas_for_improvement.map(s => `<li>📌 ${s}</li>`).join('')
+                : '';
+            const mentalHealthHtml = analysis.mental_health_notes?.length > 0
+                ? analysis.mental_health_notes.map(s => `<li>${s}</li>`).join('')
+                : '';
+
+            resultDiv.innerHTML = `
+                <div class="result-card ${result.productivity_score >= 60 ? 'result-success' : 'result-warning'}">
+                    <div class="result-header">
+                        <div class="result-emoji">${result.emoji}</div>
+                        <div class="result-title">
+                            <h4>${result.category}</h4>
+                            <span>Wellbeing: ${result.wellbeing_indicator}</span>
+                        </div>
+                        <div class="result-score">${result.productivity_score}%</div>
+                    </div>
+                    <div class="result-body">
+                        <p>${result.recommendation}</p>
+                        ${(strengthsHtml || improvementsHtml) ? `
+                        <div class="result-factors">
+                            <h5>Analysis</h5>
+                            <ul>${strengthsHtml}${improvementsHtml}</ul>
+                        </div>` : ''}
+                        ${mentalHealthHtml ? `
+                        <div class="result-factors" style="margin-top: 12px; background: rgba(236, 72, 153, 0.1);">
+                            <h5>🧠 Mental Health Notes</h5>
+                            <ul>${mentalHealthHtml}</ul>
+                        </div>` : ''}
+                    </div>
+                </div>
+            `;
+        } else {
+            resultDiv.innerHTML = `<div class="result-error">❌ ${result?.error || 'Analysis failed'}</div>`;
+        }
+    } catch (error) {
+        resultDiv.className = 'ml-result';
+        resultDiv.innerHTML = `<div class="result-error">❌ Error: ${error.message}</div>`;
+    }
+}
+
+async function segmentCustomer() {
+    const resultDiv = document.getElementById('customer-result');
+    resultDiv.innerHTML = '<div class="loading">🎯 Analyzing customer data...</div>';
+    resultDiv.className = 'ml-result loading';
+
+    const data = {
+        recency: parseFloat(document.getElementById('customer-recency').value),
+        frequency: parseFloat(document.getElementById('customer-frequency').value),
+        monetary: parseFloat(document.getElementById('customer-monetary').value)
+    };
+
+    try {
+        const result = await apiCall('/ml/customer-segment', {
+            method: 'POST',
+            body: JSON.stringify(data)
+        });
+
+        resultDiv.className = 'ml-result';
+
+        if (result && result.success) {
+            const rfm = result.rfm_analysis || {};
+
+            resultDiv.innerHTML = `
+                <div class="result-card result-success">
+                    <div class="result-header">
+                        <div class="result-emoji">${result.emoji}</div>
+                        <div class="result-title">
+                            <h4>${result.segment}</h4>
+                            <span>Cluster #${result.cluster}</span>
+                        </div>
+                    </div>
+                    <div class="result-body">
+                        <p><strong>${result.description}</strong></p>
+                        <p>💡 <em>${result.recommended_strategy}</em></p>
+                        <div class="result-factors">
+                            <h5>RFM Analysis</h5>
+                            <ul>
+                                <li>📅 Recency: ${rfm.recency_days} days since last purchase</li>
+                                <li>🔄 Frequency: ${rfm.purchase_frequency} purchases/month</li>
+                                <li>💵 Monetary: $${rfm.monetary_value} average order value</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            `;
+        } else {
+            resultDiv.innerHTML = `<div class="result-error">❌ ${result?.error || 'Segmentation failed'}</div>`;
+        }
+    } catch (error) {
+        resultDiv.className = 'ml-result';
+        resultDiv.innerHTML = `<div class="result-error">❌ Error: ${error.message}</div>`;
+    }
+}
+
 // ==================== EASTER EGGS ====================
 console.log('%c🚀 ARIA - AI Personal Task Automation', 'font-size: 20px; font-weight: bold; color: #7c3aed;');
 console.log('%cBuilt for DSARG_2 Hackathon', 'font-size: 12px; color: #a855f7;');
 console.log('%cPress Ctrl+K to quickly access ARIA!', 'font-size: 11px; color: #64748b;');
+console.log('%c🧠 ML Insights powered by XGBoost, RandomForest & KMeans', 'font-size: 11px; color: #ec4899;');
